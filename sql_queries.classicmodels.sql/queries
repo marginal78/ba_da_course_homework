@@ -1,0 +1,64 @@
+-- This query calculates the difference between values for each quarter
+-- allowing us to see quarter-over-quarter changes
+
+SELECT 
+    year,
+    month,
+    monthly_revenue,
+    LAG(monthly_revenue ,2) OVER (ORDER BY year, month) AS prev_month_revenue2,
+	LAG(monthly_revenue ,3) OVER (ORDER BY year, month) AS prev_month_revenue3 
+   
+FROM (
+    SELECT 
+        YEAR(o.orderDate) AS year,
+        MONTH(o.orderDate) AS month,
+        SUM(od.quantityOrdered * od.priceEach) AS monthly_revenue
+    FROM orders as o
+    JOIN orderdetails as od ON o.orderNumber = od.orderNumber 
+    GROUP BY YEAR(o.orderDate), MONTH(o.orderDate)
+) AS monthly_data
+
+
+/*  
+This query analyzes customer orders by combining revenue and profit information.
+
+1. order_info CTE  
+   - Calculates revenue per order by multiplying priceEach * quantityOrdered  
+   - Joins orders with order details to get order date, status, and customer information  
+
+2. profit CTE  
+   - Calculates total profit per product  
+   - Profit = (selling price - buying price) * quantity  
+   - Groups results by product to compute total accumulated profit  
+
+3. Final SELECT  
+   - Returns detailed order information including order date, status, product name, customer name, city, revenue  
+   - Joins order_info with product details, customer info, and total product profit  
+   - Provides a combined view of revenue and profit per ordered product  
+*/
+with order_info AS (
+select customerNumber,productCode,orderDate,orderdetails.orderNumber,status,priceEach, sum(priceEach*quantityOrdered) AS revenue 
+from  orderdetails 
+left join orders on orderdetails.orderNumber=orders.orderNumber 
+Group by customerNumber,productCode, orderdetails.orderNumber,priceEach,status
+),
+
+
+ profit as (
+SELECT    products.productCode,products.productName,SUM((orderdetails.priceEach - products.buyPrice) * orderdetails.quantityOrdered) AS totalProfit
+FROM orderdetails 
+JOIN products  ON orderdetails.productCode = products.productCode
+GROUP BY  products.productCode, products.productName
+ORDER BY   totalProfit DESC
+)
+
+
+
+select order_info.orderDate,status,products.productName,customerName,city,revenue , profit.totalProfit,  customers.salesRepEmployeeNumber
+from  order_info
+left join products on products.productCode = order_info.productCode
+left join customers on customers.customerNumber = order_info.customerNumber 
+left join profit on profit.productName = products.productName
+-- left join name_surname on name_surname.customerNumber = orders.customerNumber 
+;
+
